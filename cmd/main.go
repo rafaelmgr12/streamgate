@@ -7,20 +7,19 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/rafaelmgr12/streamgate/internal/handler"
 	"github.com/rafaelmgr12/streamgate/internal/transport"
 )
 
 func main() {
 	addr := ":8080" // TODO: read from config/env
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Gateway up"))
-	})
+	h := handler.NewHandler()
 
-	httpTransport := transport.NewHTTPTransport(addr, handler)
+	httpTransport := transport.NewHTTPTransport(addr, h)
 	// Start listener in goroutine for graceful shutdown later
 	go func() {
 		log.Printf("Listening on %s", addr)
-		if err := httpTransport.ListenAndServe(); err != nil {
+		if err := httpTransport.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("HTTP Listen error: %v", err)
 		}
 	}()
