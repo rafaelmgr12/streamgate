@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"net/http"
+	"time"
 )
 
 type HTTPTransport struct {
@@ -40,5 +41,8 @@ func (h *HTTPTransport) Consume() <-chan Message {
 }
 
 func (h *HTTPTransport) Close() error {
-	return h.server.Shutdown(context.Background())
+	// Create a context with a timeout to allow for graceful shutdown.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return h.server.Shutdown(ctx)
 }
