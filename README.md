@@ -1,4 +1,4 @@
-# Go API Gateway + L4 Load Balancer
+# Streamgate: Go API Gateway + L4 Load Balancer
 
 A modern, extensible API Gateway and Layer 4 Load Balancer implemented in Go.  
 This project serves as a unified entrypoint for HTTP (and, in the future, any TCP-based protocols), enabling scalable microservice architectures and robust traffic management.
@@ -44,8 +44,8 @@ Clients --> | Transport  |  --->  | Gateway Routing |  --->   | Service Backends
 ### Clone the repository
 
 ```bash
-git clone https://github.com/yourname/apigw-lb.git
-cd apigw-lb
+git clone https://github.com/rafaelmgr12/streamgate.git
+cd streamgate
 go mod tidy
 ```
 
@@ -81,8 +81,8 @@ go run main.go
 ### Docker
 
 ```bash
-docker build -t apigw-lb .
-docker run -p 8080:8080 apigw-lb
+docker build -t streamgate .
+docker run -p 8080:8080 streamgate
 ```
 
 ---
