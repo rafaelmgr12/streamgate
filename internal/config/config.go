@@ -2,28 +2,35 @@
 // It loads settings from environment variables and provides sensible defaults.
 package config
 
-import "os"
+import (
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
+// TransportConfig defines the configuration for a single network transport.
+type TransportConfig struct {
+	Type string `yaml:"type"`
+	Addr string `yaml:"addr"`
+}
 
 // Config holds all configuration for the application.
-// Each field can be populated from environment variables.
 type Config struct {
-	// ListenAddr is the network address the server will listen on (e.g., ":8080").
-	ListenAddr string
+	Transports []TransportConfig `yaml:"transports"`
 }
 
-// New creates a new Config instance, populating it with values from environment
-// variables. It provides default values for any settings that are not specified.
-func New() *Config {
-	return &Config{
-		ListenAddr: getEnv("LISTEN_ADDR", ":8080"),
+// Load reads a configuration file from the given path, unmarshals it into a
+// Config struct, and returns it.
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
-}
 
-// getEnv retrieves the value of an environment variable by its key.
-// If the variable is not set, it returns the provided fallback value.
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
 	}
-	return fallback
+
+	return &cfg, nil
 }

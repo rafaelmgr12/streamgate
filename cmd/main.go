@@ -5,30 +5,45 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
-	"github.com/joho/godotenv"
 	"github.com/rafaelmgr12/streamgate/internal/config"
 	"github.com/rafaelmgr12/streamgate/internal/handler"
 	"github.com/rafaelmgr12/streamgate/internal/transport"
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using default configuration")
+	cfg, err := config.Load("config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	cfg := config.New()
-	h := handler.NewHTTPHandler()
+	var wg sync.WaitGroup
+	transports := []transport.Transport{}
 
-	httpTransport := transport.NewHTTPTransport(cfg.ListenAddr, h)
-	// Start listener in goroutine for graceful shutdown later
-	go func() {
-		log.Printf("Listening on %s", cfg.ListenAddr)
-		if err := httpTransport.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("HTTP Listen error: %v", err)
+	for _, t := range cfg.Transports {
+		log.Printf("Initializing transport of type '%s' on address '%s'", t.Type, t.Addr)
+		var trans transport.Transport
+		switch t.Type {
+		case "http":
+			h := handler.NewHTTPHandler()
+			trans = transport.NewHTTPTransport(t.Addr, h)
+		default:
+			log.Printf("Unknown transport type: %s", t.Type)
+			continue
 		}
-	}()
+		transports = append(transports, trans)
+
+		wg.Add(1)
+		go func(tr transport.Transport) {
+			defer wg.Done()
+			log.Printf("Starting transport on %s", tr.Addr())
+			if err := tr.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("Transport error: %v", err)
+			}
+		}(trans)
+	}
 
 	// Wait for system interrupt (Ctrl+C, Docker stop, etc)
 	quit := make(chan os.Signal, 1)
@@ -36,9 +51,12 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down gracefully...")
-	if err := httpTransport.Close(); err != nil {
-		log.Fatalf("Error during shutdown: %v", err)
+	for _, t := range transports {
+		if err := t.Close(); err != nil {
+			log.Printf("Error during shutdown: %v", err)
+		}
 	}
-	log.Println("Shutdown complete.")
 
+	wg.Wait()
+	log.Println("Shutdown complete.")
 }
