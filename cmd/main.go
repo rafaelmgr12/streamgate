@@ -13,7 +13,7 @@ import (
 
 func main() {
 	addr := ":8080" // TODO: read from config/env
-	h := handler.NewHandler()
+	h := handler.NewHTTPHandler()
 
 	httpTransport := transport.NewHTTPTransport(addr, h)
 	// Start listener in goroutine for graceful shutdown later
