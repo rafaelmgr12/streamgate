@@ -1,18 +1,12 @@
 package handler
 
 import (
-	"log"
 	"net/http"
+
+	"github.com/rafaelmgr12/streamgate/internal/middleware"
 )
 
-// loggingMiddleware logs incoming HTTP requests.
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
-		next.ServeHTTP(w, r)
-	})
-}
-
+// NewHTTPHandler creates a new HTTP handler.
 func NewHTTPHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -22,5 +16,5 @@ func NewHTTPHandler() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
-	return loggingMiddleware(mux)
+	return middleware.Logging(mux)
 }
