@@ -1,8 +1,18 @@
 package handler
 
-import "net/http"
+import (
+	"log"
+	"net/http"
+)
 
-// NewHTTPHandler creates a new HTTP handler.
+// loggingMiddleware logs incoming HTTP requests.
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("%s %s %s", r.RemoteAddr, r.Method, r.URL)
+		next.ServeHTTP(w, r)
+	})
+}
+
 func NewHTTPHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -12,5 +22,5 @@ func NewHTTPHandler() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
-	return mux
+	return loggingMiddleware(mux)
 }
