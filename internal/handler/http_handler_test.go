@@ -20,3 +20,15 @@ func TestHTTPHandler(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 	assert.Equal(t, "Hello from API Gateway", rr.Body.String())
 }
+
+func TestHTTPHandler_Healthz(t *testing.T) {
+	h := handler.NewHTTPHandler()
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	assert.Equal(t, "ok", rr.Body.String())
+}

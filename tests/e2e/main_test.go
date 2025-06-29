@@ -51,6 +51,27 @@ func TestMainE2E(t *testing.T) {
 		t.Errorf("expected response body to be %q; got %q", expected, string(body))
 	}
 
+	// Make a request to the /healthz endpoint
+	resp, err = http.Get("http://localhost:8080/healthz")
+	if err != nil {
+		t.Fatalf("could not send GET request to /healthz: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status OK for /healthz; got %v", resp.Status)
+	}
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("could not read response body for /healthz: %v", err)
+	}
+
+	expected = "ok"
+	if string(body) != expected {
+		t.Errorf("expected response body for /healthz to be %q; got %q", expected, string(body))
+	}
+
 	// Stop the server
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
 		t.Fatalf("could not send interrupt signal: %v", err)
