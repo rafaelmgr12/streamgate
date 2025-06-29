@@ -2,20 +2,19 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 )
 
 type HTTPTransport struct {
-	server  *http.Server
-	addr    string
-	msgChan chan Message
+	server *http.Server
+	addr   string
 }
 
 func NewHTTPTransport(addr string, handler http.Handler) *HTTPTransport {
 	return &HTTPTransport{
-		addr:    addr,
-		msgChan: make(chan Message, 100), // Buffered channel for efficiency
+		addr: addr,
 		server: &http.Server{
 			Addr:    addr,
 			Handler: handler,
@@ -32,12 +31,7 @@ func (h *HTTPTransport) ListenAndServe() error {
 }
 
 func (h *HTTPTransport) Dial(address string) error {
-	// Not implemented for HTTP server; return error or panic
-	panic("Not implemented")
-}
-
-func (h *HTTPTransport) Consume() <-chan Message {
-	return h.msgChan
+	return fmt.Errorf("dial is not supported for HTTP transport")
 }
 
 func (h *HTTPTransport) Close() error {

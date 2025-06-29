@@ -15,6 +15,11 @@ type Transport interface {
 	Addr() string
 	ListenAndServe() error     // For servers (HTTP/TCP/etc.)
 	Dial(address string) error // For clients (optional, or return error if not supported)
-	Consume() <-chan Message   // Channel of inbound messages
 	Close() error
+}
+
+// StreamingTransport defines an interface for transports that produce a stream of messages.
+type StreamingTransport interface {
+	Transport
+	Consume() <-chan Message // Channel of inbound messages
 }
