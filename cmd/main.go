@@ -29,6 +29,9 @@ func main() {
 		case "http":
 			h := handler.NewHTTPHandler()
 			trans = transport.NewHTTPTransport(t.Addr, h)
+		case "grpc":
+			h := handler.NewGRPCHandler()
+			trans = transport.NewGRPCTransport(t.Addr, h)
 		default:
 			log.Printf("Unknown transport type: %s", t.Type)
 			continue

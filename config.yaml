@@ -1,3 +1,5 @@
 transports:
-  - type: http
+  - type: "http"
     addr: ":8080"
+  - type: "grpc"
+    addr: ":50051"

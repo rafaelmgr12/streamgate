@@ -1,12 +1,17 @@
 package e2e
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/rafaelmgr12/streamgate/proto/greeter"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func TestMainE2E(t *testing.T) {
@@ -21,6 +26,7 @@ func TestMainE2E(t *testing.T) {
 
 	// Run the binary
 	cmd = exec.Command("./streamgate")
+	cmd.Dir = "../../" // Root directory of the project
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -70,6 +76,24 @@ func TestMainE2E(t *testing.T) {
 	expected = "ok"
 	if string(body) != expected {
 		t.Errorf("expected response body for /healthz to be %q; got %q", expected, string(body))
+	}
+
+	// Test gRPC connection
+	conn, err := grpc.Dial("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("did not connect: %v", err)
+	}
+	defer conn.Close()
+	c := greeter.NewGreeterClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r, err := c.SayHello(ctx, &greeter.HelloRequest{Name: "e2e"})
+	if err != nil {
+		t.Fatalf("could not greet: %v", err)
+	}
+	if r.GetMessage() != "Hello, e2e!" {
+		t.Errorf("unexpected gRPC reply: got %q, want %q", r.GetMessage(), "Hello, e2e!")
 	}
 
 	// Stop the server
