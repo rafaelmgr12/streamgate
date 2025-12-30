@@ -86,6 +86,18 @@ docker build -t streamgate .
 docker run -p 8080:8080 streamgate
 ```
 
+### Docker Compose (with sample backends)
+
+Spin up Streamgate alongside two simple echo backends:
+
+```bash
+docker compose up --build
+```
+
+- Streamgate listens on `localhost:8080`.
+- Requests to `http://localhost:8080/api/echo/<anything>` are proxied round-robin to two [ealen/echo-server](https://hub.docker.com/r/ealen/echo-server) containers defined in `docker-compose.yml`.
+- The compose stack uses `config.compose.yaml` for routing; edit this file to experiment with different backend services.
+
 ---
 
 ## Configuration

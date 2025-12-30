@@ -36,7 +36,7 @@ func main() {
 		var trans transport.Transport
 		switch t.Type {
 		case "http":
-			h := handler.NewHTTPHandler()
+			h := handler.NewHTTPHandler(cfg)
 			trans = transport.NewHTTPTransport(t.Addr, h)
 		case "grpc":
 			h := handler.NewGRPCHandler()

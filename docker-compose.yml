@@ -1,0 +1,18 @@
+services:
+  streamgate:
+    build: .
+    image: streamgate:local
+    command: ["/app/streamgate", "-config", "/app/config.yaml"]
+    depends_on:
+      - echo1
+      - echo2
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.compose.yaml:/app/config.yaml:ro
+
+  echo1:
+    image: ealen/echo-server:0.6.0
+
+  echo2:
+    image: ealen/echo-server:0.6.0

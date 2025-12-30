@@ -81,7 +81,13 @@ func buildServiceRoutes(cfg *config.Config) []serviceRoute {
 }
 
 // NewHTTPHandler creates a new HTTP handler with routing/proxy behavior.
-func NewHTTPHandler(cfg *config.Config) http.Handler {
+// The config argument is optional; when omitted, the handler will only expose
+// the default root and healthz endpoints.
+func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
+	var cfg *config.Config
+	if len(cfgs) > 0 {
+		cfg = cfgs[0]
+	}
 	mux := http.NewServeMux()
 
 	// Root + healthz preserved for existing tests and e2e

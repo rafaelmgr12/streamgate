@@ -1,0 +1,10 @@
+transports:
+  - type: "http"
+    addr: ":8080"
+
+services:
+  - name: "echo"
+    path_prefix: "/api/echo/"
+    backends:
+      - "http://echo1:80"
+      - "http://echo2:80"
