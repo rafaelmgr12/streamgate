@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,18 +16,27 @@ import (
 )
 
 func TestMainE2E(t *testing.T) {
+	// Resolve project root and binary path
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("could not get working directory: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+	binPath := filepath.Join(root, "streamgate-e2e")
+
 	// Build the binary
-	cmd := exec.Command("go", "build", "-o", "streamgate", "../../cmd/main.go")
+	cmd := exec.Command("go", "build", "-o", binPath, "./cmd/main.go")
+	cmd.Dir = root
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("could not build binary: %v", err)
 	}
-	defer os.Remove("streamgate")
+	defer os.Remove(binPath)
 
 	// Run the binary
-	cmd = exec.Command("./streamgate")
-	cmd.Dir = "../../" // Root directory of the project
+	cmd = exec.Command(binPath)
+	cmd.Dir = root // Root directory of the project
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
