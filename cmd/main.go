@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -14,7 +15,15 @@ import (
 )
 
 func main() {
-	cfg, err := config.Load("config.yaml")
+	defaultConfigPath := os.Getenv("STREAMGATE_CONFIG")
+	if defaultConfigPath == "" {
+		defaultConfigPath = "config.yaml"
+	}
+
+	configPath := flag.String("config", defaultConfigPath, "path to config file")
+	flag.Parse()
+
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}

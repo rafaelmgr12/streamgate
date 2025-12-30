@@ -32,5 +32,32 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	applyEnvOverrides(&cfg)
+
 	return &cfg, nil
+}
+
+// applyEnvOverrides overrides configuration settings with environment variables if they are set.
+func applyEnvOverrides(cfg *Config) {
+	overrideAddr(cfg, "http", os.Getenv("STREAMGATE_HTTP_ADDR"))
+	overrideAddr(cfg, "grpc", os.Getenv("STREAMGATE_GRPC_ADDR"))
+}
+
+// overrideAddr sets the address for a given transport type if the provided addr is not empty.
+func overrideAddr(cfg *Config, transportType, addr string) {
+	if addr == "" {
+		return
+	}
+
+	for i := range cfg.Transports {
+		if cfg.Transports[i].Type == transportType {
+			cfg.Transports[i].Addr = addr
+			return
+		}
+	}
+
+	cfg.Transports = append(cfg.Transports, TransportConfig{
+		Type: transportType,
+		Addr: addr,
+	})
 }

@@ -72,11 +72,12 @@ go mod tidy
 ### Run Locally
 
 ```bash
-go run main.go
+go run ./cmd/main.go -config config.yaml
 ```
 
-- By default, the gateway listens on `:8080`.
-- You can configure ports, services, and routing rules in `internal/config/config.go` or via environment variables.
+- By default, the gateway listens on `:8080` (HTTP) and `:50051` (gRPC).
+- Override the config path via `-config` or `STREAMGATE_CONFIG`.
+- Override transport addresses via `STREAMGATE_HTTP_ADDR` and `STREAMGATE_GRPC_ADDR` (these replace or add transports in `config.yaml`).
 
 ### Docker
 
