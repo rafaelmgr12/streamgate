@@ -16,5 +16,10 @@ func NewHTTPHandler() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
-	return middleware.Logging(mux)
+
+	return middleware.Chain(
+		mux,
+		middleware.Logging,
+	)
+
 }
