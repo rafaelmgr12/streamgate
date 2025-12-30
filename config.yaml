@@ -3,3 +3,10 @@ transports:
     addr: ":8080"
   - type: "grpc"
     addr: ":50051"
+
+services:
+  - name: "users"
+    path_prefix: "/api/users/"
+    backends:
+      - "http://localhost:9001"
+      - "http://localhost:9002"

@@ -14,9 +14,17 @@ type TransportConfig struct {
 	Addr string `yaml:"addr"`
 }
 
+// ServiceConfig defines the configuration for a service.
+type ServiceConfig struct {
+	Name       string   `yaml:"name"`
+	PathPrefix string   `yaml:"path_prefix"`
+	Backends   []string `yaml:"backends"`
+}
+
 // Config holds all configuration for the application.
 type Config struct {
 	Transports []TransportConfig `yaml:"transports"`
+	Services   []ServiceConfig   `yaml:"services,omitempty"`
 }
 
 // Load reads a configuration file from the given path, unmarshals it into a
