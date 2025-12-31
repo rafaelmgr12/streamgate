@@ -6,8 +6,8 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-	"sync/atomic"
 
+	"github.com/rafaelmgr12/streamgate/internal/balancer"
 	"github.com/rafaelmgr12/streamgate/internal/config"
 	"github.com/rafaelmgr12/streamgate/internal/middleware"
 )
@@ -16,16 +16,6 @@ type serviceRoute struct {
 	name       string
 	pathPrefix string
 	proxy      *httputil.ReverseProxy
-}
-
-type backendPool struct {
-	targets []*url.URL
-	idx     uint64
-}
-
-func (p *backendPool) next() *url.URL {
-	n := atomic.AddUint64(&p.idx, 1)
-	return p.targets[(n-1)%uint64(len(p.targets))]
 }
 
 func parseBackendURL(raw string) (*url.URL, error) {
@@ -47,22 +37,26 @@ func buildServiceRoutes(cfg *config.Config) []serviceRoute {
 			continue
 		}
 
-		pool := &backendPool{}
+		targets := make([]*url.URL, 0, len(svc.Backends))
 		for _, raw := range svc.Backends {
 			u, err := parseBackendURL(raw)
 			if err != nil {
 				log.Printf("invalid backend for service %q: %v", svc.Name, err)
 				continue
 			}
-			pool.targets = append(pool.targets, u)
+			targets = append(targets, u)
 		}
-		if len(pool.targets) == 0 {
+		if len(targets) == 0 {
 			continue
 		}
 
+		selector, err := balancer.NewSelector(targets, svc.LoadBalancing)
+		if err != nil {
+			log.Printf("%v, using %s", err, balancer.DefaultAlgorithm)
+		}
 		proxy := &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
-				target := pool.next()
+				target := selector.Next()
 				req.URL.Scheme = target.Scheme
 				req.URL.Host = target.Host
 				req.Host = target.Host

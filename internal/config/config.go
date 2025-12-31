@@ -16,9 +16,10 @@ type TransportConfig struct {
 
 // ServiceConfig defines the configuration for a service.
 type ServiceConfig struct {
-	Name       string   `yaml:"name"`
-	PathPrefix string   `yaml:"path_prefix"`
-	Backends   []string `yaml:"backends"`
+	Name          string   `yaml:"name"`
+	PathPrefix    string   `yaml:"path_prefix"`
+	Backends      []string `yaml:"backends"`
+	LoadBalancing string   `yaml:"load_balancing,omitempty"`
 }
 
 // Config holds all configuration for the application.
