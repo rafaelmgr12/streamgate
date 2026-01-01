@@ -3,7 +3,10 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -43,6 +46,10 @@ func Load(path string) (*Config, error) {
 
 	applyEnvOverrides(&cfg)
 
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
 }
 
@@ -69,4 +76,70 @@ func overrideAddr(cfg *Config, transportType, addr string) {
 		Type: transportType,
 		Addr: addr,
 	})
+}
+
+func (cfg *Config) Validate() error {
+	if cfg == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	if len(cfg.Transports) == 0 {
+		return fmt.Errorf("at least one transport is required")
+	}
+
+	for _, transport := range cfg.Transports {
+
+		tType := strings.TrimSpace(transport.Type)
+
+		if tType == "" {
+			return fmt.Errorf("transport type is required")
+		}
+		if strings.TrimSpace(transport.Addr) == "" {
+			return fmt.Errorf("transport %q has empty addr", tType)
+		}
+
+	}
+
+	for _, svc := range cfg.Services {
+
+		if strings.TrimSpace(svc.Name) == "" {
+			return fmt.Errorf("service name is required")
+		}
+
+		p := strings.TrimSpace(svc.PathPrefix)
+		if p == "" {
+			return fmt.Errorf("service %q has empty path_prefix", svc.Name)
+		}
+
+		if !strings.HasPrefix(p, "/") {
+			return fmt.Errorf("service %q path_prefix must start with '/'", svc.Name)
+		}
+
+		if len(svc.Backends) == 0 {
+			return fmt.Errorf("service %q must have at least one backend", svc.Name)
+		}
+
+		for _, raw := range svc.Backends {
+			u, err := parseBackendURLForValidation(raw)
+			if err != nil || u.Host == "" {
+				return fmt.Errorf("service %q has invalid backend %q: %w", svc.Name, raw, err)
+			}
+		}
+	}
+
+	return nil
+
+}
+
+func parseBackendURLForValidation(raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("backend URL is empty")
+	}
+
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+
+	return url.Parse(raw)
 }
