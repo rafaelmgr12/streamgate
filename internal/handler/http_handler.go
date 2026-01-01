@@ -114,6 +114,7 @@ func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
 	// Compose middleware chain (outermost last in the list)
 	return middleware.Chain(
 		mux,
+		middleware.RequestID,
 		middleware.Logging,
 	)
 }

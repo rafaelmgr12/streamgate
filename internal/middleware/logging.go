@@ -33,7 +33,10 @@ func Logging(next http.Handler) http.Handler {
 
 		next.ServeHTTP(rw, r)
 
+		id, _ := GetRequestID(r.Context())
+
 		logger.Info("incoming request",
+			"request_id", id,
 			"method", r.Method,
 			"path", r.URL.Path,
 			"remote_addr", r.RemoteAddr,
