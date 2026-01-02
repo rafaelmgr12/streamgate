@@ -81,7 +81,7 @@ go run ./cmd/main.go -config config.yaml
 
 ### Docker
 
-```bash
+```**bash**
 docker build -t streamgate .
 docker run -p 8080:8080 streamgate
 ```
@@ -157,6 +157,37 @@ MIT License
 - [ ] Dynamic configuration reload
 - [ ] Observability (metrics, tracing)
 - [ ] gRPC/WebSocket support
+
+---
+
+## Task List
+
+### MVP (HTTP gateway)
+
+- [x] Config validation (transports, services, backends)
+- [x] Request ID middleware with logging field
+- [ ] Proxy timeouts and single retry
+- [ ] Backend health tracking for balancer
+- [ ] Service health endpoint (`/healthz/services`)
+- [ ] Integration tests for proxy and backend failover
+
+### Robustness
+
+- [ ] Graceful shutdown with per-transport timeouts
+- [ ] Rate limiting middleware
+- [ ] Metrics endpoint (`/metrics`)
+
+### Protocols
+
+- [ ] TCP transport with connection handler
+- [ ] TCP backend health checks
+- [ ] Config support for TCP transport
+
+### Extensibility
+
+- [ ] Config-driven middleware chain
+- [ ] Admin API (status, config dump)
+- [ ] Service discovery source (DNS or file)
 
 ---
 
