@@ -2,10 +2,12 @@ package handler
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/rafaelmgr12/streamgate/internal/balancer"
 	"github.com/rafaelmgr12/streamgate/internal/config"
@@ -18,60 +20,9 @@ type serviceRoute struct {
 	proxy      *httputil.ReverseProxy
 }
 
-func parseBackendURL(raw string) (*url.URL, error) {
-	if !strings.Contains(raw, "://") {
-		raw = "http://" + raw
-	}
-	return url.Parse(raw)
-}
-
-func buildServiceRoutes(cfg *config.Config) []serviceRoute {
-	if cfg == nil {
-		return nil
-	}
-
-	routes := make([]serviceRoute, 0, len(cfg.Services))
-
-	for _, svc := range cfg.Services {
-		if svc.PathPrefix == "" || len(svc.Backends) == 0 {
-			continue
-		}
-
-		targets := make([]*url.URL, 0, len(svc.Backends))
-		for _, raw := range svc.Backends {
-			u, err := parseBackendURL(raw)
-			if err != nil {
-				log.Printf("invalid backend for service %q: %v", svc.Name, err)
-				continue
-			}
-			targets = append(targets, u)
-		}
-		if len(targets) == 0 {
-			continue
-		}
-
-		selector, err := balancer.NewSelector(targets, svc.LoadBalancing)
-		if err != nil {
-			log.Printf("%v, using %s", err, balancer.DefaultAlgorithm)
-		}
-		proxy := &httputil.ReverseProxy{
-			Director: func(req *http.Request) {
-				target := selector.Next()
-				req.URL.Scheme = target.Scheme
-				req.URL.Host = target.Host
-				req.Host = target.Host
-				// path is already stripped by http.StripPrefix below
-			},
-		}
-
-		routes = append(routes, serviceRoute{
-			name:       svc.Name,
-			pathPrefix: svc.PathPrefix,
-			proxy:      proxy,
-		})
-	}
-
-	return routes
+type retryRoundTripper struct {
+	base       http.RoundTripper
+	maxRetries int
 }
 
 // NewHTTPHandler creates a new HTTP handler with routing/proxy behavior.
@@ -117,4 +68,138 @@ func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
 		middleware.RequestID,
 		middleware.Logging,
 	)
+}
+
+func (rt *retryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if rt.maxRetries <= 0 || !isIdempotent(req.Method) {
+		return rt.base.RoundTrip(req)
+	}
+
+	if req.Body != nil && req.Body != http.NoBody && req.GetBody == nil {
+		return rt.base.RoundTrip(req)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= rt.maxRetries; attempt++ {
+		r := req
+		if attempt > 0 {
+			r = req.Clone(req.Context())
+			if req.GetBody != nil {
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, err
+				}
+				r.Body = body
+			}
+		}
+
+		resp, err := rt.base.RoundTrip(r)
+		if err == nil {
+			if shouldRetryStatus(resp.StatusCode) && attempt < rt.maxRetries {
+				resp.Body.Close()
+				continue
+			}
+			return resp, nil
+		}
+		lastErr = err
+	}
+
+	return nil, lastErr
+}
+
+func parseBackendURL(raw string) (*url.URL, error) {
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	return url.Parse(raw)
+}
+
+func buildServiceRoutes(cfg *config.Config) []serviceRoute {
+	if cfg == nil {
+		return nil
+	}
+
+	routes := make([]serviceRoute, 0, len(cfg.Services))
+
+	for _, svc := range cfg.Services {
+		if svc.PathPrefix == "" || len(svc.Backends) == 0 {
+			continue
+		}
+
+		targets := make([]*url.URL, 0, len(svc.Backends))
+		for _, raw := range svc.Backends {
+			u, err := parseBackendURL(raw)
+			if err != nil {
+				log.Printf("invalid backend for service %q: %v", svc.Name, err)
+				continue
+			}
+			targets = append(targets, u)
+		}
+		if len(targets) == 0 {
+			continue
+		}
+
+		selector, err := balancer.NewSelector(targets, svc.LoadBalancing)
+		if err != nil {
+			log.Printf("%v, using %s", err, balancer.DefaultAlgorithm)
+		}
+
+		proxyTransport := newProxyTransport()
+
+		proxy := &httputil.ReverseProxy{
+			Director: func(req *http.Request) {
+				target := selector.Next()
+				req.URL.Scheme = target.Scheme
+				req.URL.Host = target.Host
+				req.Host = target.Host
+				// path is already stripped by http.StripPrefix below
+			},
+			Transport: &retryRoundTripper{
+				base:       proxyTransport,
+				maxRetries: 1,
+			},
+		}
+
+		routes = append(routes, serviceRoute{
+			name:       svc.Name,
+			pathPrefix: svc.PathPrefix,
+			proxy:      proxy,
+		})
+	}
+
+	return routes
+}
+
+func newProxyTransport() *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   3 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   3 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: 5 * time.Second,
+	}
+}
+
+func isIdempotent(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodTrace:
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldRetryStatus(status int) bool {
+	switch status {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
 }
