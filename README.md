@@ -166,7 +166,7 @@ MIT License
 
 - [x] Config validation (transports, services, backends)
 - [x] Request ID middleware with logging field
-- [ ] Proxy timeouts and single retry
+- [x] Proxy timeouts and single retry
 - [ ] Backend health tracking for balancer
 - [ ] Service health endpoint (`/healthz/services`)
 - [ ] Integration tests for proxy and backend failover
