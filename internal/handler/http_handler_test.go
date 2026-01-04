@@ -135,3 +135,50 @@ func TestHTTPHandler_ServiceProxy_MultipleBackendsUsed(t *testing.T) {
 		t.Fatalf("expected both backends to receive at least one request, got hits1=%d hits2=%d", hits1, hits2)
 	}
 }
+
+func TestHTTPHandler_ServiceProxy_SkipsUnhealthyBackend(t *testing.T) {
+	var badHits int32
+	var goodHits int32
+
+	badBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&badHits, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badBackend.Close()
+
+	goodBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&goodHits, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer goodBackend.Close()
+
+	cfg := &config.Config{
+		Services: []config.ServiceConfig{
+			{
+				Name:       "test",
+				PathPrefix: "/api/test/",
+				Backends:   []string{badBackend.URL, goodBackend.URL},
+			},
+		},
+	}
+
+	h := handler.NewHTTPHandler(cfg)
+	server := httptest.NewServer(h)
+	defer server.Close()
+
+	for i := 0; i < 7; i++ {
+		resp, err := http.Get(server.URL + "/api/test/any")
+		if err != nil {
+			t.Fatalf("request %d failed: %v", i, err)
+		}
+		_, _ = io.ReadAll(resp.Body)
+		resp.Body.Close()
+	}
+
+	if atomic.LoadInt32(&badHits) != 3 {
+		t.Fatalf("expected bad backend to be hit 3 times, got %d", badHits)
+	}
+	if atomic.LoadInt32(&goodHits) != 4 {
+		t.Fatalf("expected good backend to be hit 4 times, got %d", goodHits)
+	}
+}

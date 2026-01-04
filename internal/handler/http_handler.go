@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
@@ -25,6 +26,10 @@ type retryRoundTripper struct {
 	maxRetries int
 }
 
+type targetContextKey struct{}
+
+var selectedTargetKey = targetContextKey{}
+
 // NewHTTPHandler creates a new HTTP handler with routing/proxy behavior.
 // The config argument is optional; when omitted, the handler will only expose
 // the default root and healthz endpoints.
@@ -33,6 +38,7 @@ func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
 	if len(cfgs) > 0 {
 		cfg = cfgs[0]
 	}
+	tracker := balancer.NewHealthTracker(0, 0)
 	mux := http.NewServeMux()
 
 	// Root + healthz preserved for existing tests and e2e
@@ -50,7 +56,7 @@ func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
 	})
 
 	// Register config-driven routes
-	for _, rt := range buildServiceRoutes(cfg) {
+	for _, rt := range buildServiceRoutes(cfg, tracker) {
 		prefix := rt.pathPrefix
 		// Ensure prefix semantics; config should typically end with "/"
 		stripped := strings.TrimRight(prefix, "/")
@@ -114,7 +120,7 @@ func parseBackendURL(raw string) (*url.URL, error) {
 	return url.Parse(raw)
 }
 
-func buildServiceRoutes(cfg *config.Config) []serviceRoute {
+func buildServiceRoutes(cfg *config.Config, tracker *balancer.HealthTracker) []serviceRoute {
 	if cfg == nil {
 		return nil
 	}
@@ -139,7 +145,7 @@ func buildServiceRoutes(cfg *config.Config) []serviceRoute {
 			continue
 		}
 
-		selector, err := balancer.NewSelector(targets, svc.LoadBalancing)
+		selector, err := balancer.NewHealthAwareSelector(targets, svc.LoadBalancing, tracker)
 		if err != nil {
 			log.Printf("%v, using %s", err, balancer.DefaultAlgorithm)
 		}
@@ -149,6 +155,10 @@ func buildServiceRoutes(cfg *config.Config) []serviceRoute {
 		proxy := &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
 				target := selector.Next()
+				if target != nil {
+					ctx := context.WithValue(req.Context(), selectedTargetKey, target)
+					*req = *req.WithContext(ctx)
+				}
 				req.URL.Scheme = target.Scheme
 				req.URL.Host = target.Host
 				req.Host = target.Host
@@ -157,6 +167,27 @@ func buildServiceRoutes(cfg *config.Config) []serviceRoute {
 			Transport: &retryRoundTripper{
 				base:       proxyTransport,
 				maxRetries: 1,
+			},
+			ModifyResponse: func(resp *http.Response) error {
+				if tracker == nil {
+					return nil
+				}
+				if target := selectedTarget(resp.Request.Context()); target != nil {
+					if resp.StatusCode >= 500 {
+						tracker.MarkFailure(target)
+					} else {
+						tracker.MarkSuccess(target)
+					}
+				}
+				return nil
+			},
+			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+				if tracker != nil {
+					if target := selectedTarget(r.Context()); target != nil {
+						tracker.MarkFailure(target)
+					}
+				}
+				http.Error(w, http.StatusText(http.StatusBadGateway), http.StatusBadGateway)
 			},
 		}
 
@@ -202,4 +233,9 @@ func shouldRetryStatus(status int) bool {
 	default:
 		return false
 	}
+}
+
+func selectedTarget(ctx context.Context) *url.URL {
+	target, _ := ctx.Value(selectedTargetKey).(*url.URL)
+	return target
 }
