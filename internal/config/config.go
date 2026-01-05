@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,12 +24,21 @@ type ServiceConfig struct {
 	PathPrefix    string   `yaml:"path_prefix"`
 	Backends      []string `yaml:"backends"`
 	LoadBalancing string   `yaml:"load_balancing,omitempty"`
+	HealthCheck   HealthCheckConfig `yaml:"health_check,omitempty"`
+}
+
+// HealthCheckConfig defines active health check settings.
+type HealthCheckConfig struct {
+	Path     string        `yaml:"path,omitempty"`
+	Interval time.Duration `yaml:"interval,omitempty"`
+	Timeout  time.Duration `yaml:"timeout,omitempty"`
 }
 
 // Config holds all configuration for the application.
 type Config struct {
 	Transports []TransportConfig `yaml:"transports"`
 	Services   []ServiceConfig   `yaml:"services,omitempty"`
+	HealthCheck HealthCheckConfig `yaml:"health_check,omitempty"`
 }
 
 // Load reads a configuration file from the given path, unmarshals it into a
@@ -125,10 +135,28 @@ func (cfg *Config) Validate() error {
 				return fmt.Errorf("service %q has invalid backend %q: %w", svc.Name, raw, err)
 			}
 		}
+
+		if err := validateHealthCheck(svc.HealthCheck); err != nil {
+			return fmt.Errorf("service %q health_check invalid: %w", svc.Name, err)
+		}
+	}
+
+	if err := validateHealthCheck(cfg.HealthCheck); err != nil {
+		return fmt.Errorf("health_check invalid: %w", err)
 	}
 
 	return nil
 
+}
+
+func validateHealthCheck(h HealthCheckConfig) error {
+	if h.Interval < 0 {
+		return fmt.Errorf("interval must be >= 0")
+	}
+	if h.Timeout < 0 {
+		return fmt.Errorf("timeout must be >= 0")
+	}
+	return nil
 }
 
 func parseBackendURLForValidation(raw string) (*url.URL, error) {

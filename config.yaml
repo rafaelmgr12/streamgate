@@ -4,6 +4,11 @@ transports:
   - type: "grpc"
     addr: ":50051"
 
+health_check:
+  path: "/healthz"
+  interval: "10s"
+  timeout: "2s"
+
 services:
   - name: "users"
     path_prefix: "/api/users/"

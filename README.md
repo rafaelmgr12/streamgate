@@ -115,12 +115,20 @@ transports:
   - type: http
     addr: ":8080"
 
+health_check:
+  path: "/healthz"
+  interval: "10s"
+  timeout: "2s"
+
 services:
   - name: users
     path_prefix: "/api/users/"
     backends:
       - "usersvc1:9001"
       - "usersvc2:9001"
+    health_check:
+      path: "/healthz"
+      interval: "5s"
 ```
 
 ---

@@ -2,6 +2,11 @@ transports:
   - type: "http"
     addr: ":8080"
 
+health_check:
+  path: "/healthz"
+  interval: "10s"
+  timeout: "2s"
+
 services:
   - name: "echo"
     path_prefix: "/api/echo/"

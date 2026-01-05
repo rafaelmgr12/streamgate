@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rafaelmgr12/streamgate/internal/config"
 )
@@ -135,6 +136,52 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	_, err := config.Load(path)
 	if err == nil {
 		t.Fatalf("expected error, got nil")
+	}
+}
+
+func TestLoad_HealthCheckConfig(t *testing.T) {
+	yaml := `
+transports:
+  - type: http
+    addr: ":8080"
+health_check:
+  path: "/healthz"
+  interval: "10s"
+  timeout: "2s"
+services:
+  - name: api
+    path_prefix: "/api"
+    backends:
+      - "localhost:9001"
+    health_check:
+      path: "/status"
+      interval: "5s"
+`
+
+	path := writeTempYAML(t, yaml)
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("Load() err = %v", err)
+	}
+
+	if cfg.HealthCheck.Path != "/healthz" {
+		t.Fatalf("expected global health_check path /healthz, got %q", cfg.HealthCheck.Path)
+	}
+	if cfg.HealthCheck.Interval != 10*time.Second {
+		t.Fatalf("expected global interval 10s, got %s", cfg.HealthCheck.Interval)
+	}
+	if cfg.HealthCheck.Timeout != 2*time.Second {
+		t.Fatalf("expected global timeout 2s, got %s", cfg.HealthCheck.Timeout)
+	}
+
+	if cfg.Services[0].HealthCheck.Path != "/status" {
+		t.Fatalf("expected service health_check path /status, got %q", cfg.Services[0].HealthCheck.Path)
+	}
+	if cfg.Services[0].HealthCheck.Interval != 5*time.Second {
+		t.Fatalf("expected service interval 5s, got %s", cfg.Services[0].HealthCheck.Interval)
+	}
+	if cfg.Services[0].HealthCheck.Timeout != 0 {
+		t.Fatalf("expected service timeout default 0, got %s", cfg.Services[0].HealthCheck.Timeout)
 	}
 }
 

@@ -103,10 +103,25 @@ func startActiveChecks(ctx context.Context, cfg *config.Config, tracker *balance
 			continue
 		}
 
-		checker := balancer.NewActiveHealthChecker(tracker, targets, 0, 0, "")
+		hc := mergeHealthCheck(cfg.HealthCheck, svc.HealthCheck)
+		checker := balancer.NewActiveHealthChecker(tracker, targets, hc.Interval, hc.Timeout, hc.Path)
 		checker.Start(ctx)
 
 	}
+}
+
+func mergeHealthCheck(global, override config.HealthCheckConfig) config.HealthCheckConfig {
+	merged := global
+	if strings.TrimSpace(override.Path) != "" {
+		merged.Path = override.Path
+	}
+	if override.Interval > 0 {
+		merged.Interval = override.Interval
+	}
+	if override.Timeout > 0 {
+		merged.Timeout = override.Timeout
+	}
+	return merged
 }
 
 func parseBackendURL(raw string) (*url.URL, error) {
