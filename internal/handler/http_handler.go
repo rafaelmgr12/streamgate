@@ -38,7 +38,20 @@ func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
 	if len(cfgs) > 0 {
 		cfg = cfgs[0]
 	}
-	tracker := balancer.NewHealthTracker(0, 0)
+	return NewHTTPHandlerWithTracker(cfg, nil)
+}
+
+// NewHTTPHandlerWithTracker builds the handler with a provided health tracker.
+func NewHTTPHandlerWithTracker(cfg *config.Config, tracker *balancer.HealthTracker) http.Handler {
+	if tracker == nil {
+		tracker = balancer.NewHealthTracker(0, 0)
+	}
+
+	return newHTTPHandler(cfg, tracker)
+}
+
+func newHTTPHandler(cfg *config.Config, tracker *balancer.HealthTracker) http.Handler {
+
 	mux := http.NewServeMux()
 
 	// Root + healthz preserved for existing tests and e2e
@@ -75,7 +88,6 @@ func NewHTTPHandler(cfgs ...*config.Config) http.Handler {
 		middleware.Logging,
 	)
 }
-
 func (rt *retryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if rt.maxRetries <= 0 || !isIdempotent(req.Method) {
 		return rt.base.RoundTrip(req)
