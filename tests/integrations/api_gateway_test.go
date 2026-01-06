@@ -106,8 +106,6 @@ func TestIntegration_HealthCheck(t *testing.T) {
 	gateway := httptest.NewServer(handler.NewHTTPHandlerWithTracker(cfg, tracker))
 	defer gateway.Close()
 
-	time.Sleep(2 * time.Second)
-
 	u, err := url.Parse(backend.URL)
 	require.NoError(t, err)
 
