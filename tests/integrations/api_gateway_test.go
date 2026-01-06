@@ -87,34 +87,28 @@ func TestIntegration_BackendFailover(t *testing.T) {
 }
 
 func TestIntegration_HealthCheck(t *testing.T) {
+	var status int32 = http.StatusServiceUnavailable
+
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(int(atomic.LoadInt32(&status)))
 	}))
 	defer backend.Close()
-
-	cfg := &config.Config{
-		Services: []config.ServiceConfig{
-			{
-				Name:       "healthcheck",
-				PathPrefix: "/api/health/",
-				Backends:   []string{backend.URL},
-			},
-		},
-	}
-
-	tracker := balancer.NewHealthTracker(1, time.Second)
-	gateway := httptest.NewServer(handler.NewHTTPHandlerWithTracker(cfg, tracker))
-	defer gateway.Close()
 
 	u, err := url.Parse(backend.URL)
 	require.NoError(t, err)
 
-	tracker.MarkFailure(u)
-
+	tracker := balancer.NewHealthTracker(1, time.Minute)
 	checker := balancer.NewActiveHealthChecker(tracker, []*url.URL{u}, 50*time.Millisecond, 50*time.Millisecond, "/healthz")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	checker.Start(ctx)
+
+	require.Eventually(t, func() bool {
+		return !tracker.IsHealthy(u)
+	}, 500*time.Millisecond, 20*time.Millisecond)
+
+	atomic.StoreInt32(&status, http.StatusOK)
 
 	require.Eventually(t, func() bool {
 		return tracker.IsHealthy(u)
