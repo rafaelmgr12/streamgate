@@ -16,6 +16,12 @@ type backendHealth struct {
 	unhealthyUntil      time.Time
 }
 
+// BackendStatus exposes backend health information for reporting.
+type BackendStatus struct {
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	UnhealthyUntil      time.Time `json:"unhealthy_until"`
+}
+
 // HealthTracker tracks backend health based on consecutive failures.
 type HealthTracker struct {
 	mu               sync.RWMutex
@@ -116,6 +122,26 @@ func (h *HealthTracker) IsHealthy(target *url.URL) bool {
 		return true
 	}
 	return false
+}
+
+// Snapshot returns a copy of the current backend health state.
+func (h *HealthTracker) Snapshot() map[string]BackendStatus {
+	if h == nil {
+		return nil
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	snapshot := make(map[string]BackendStatus, len(h.state))
+	for key, state := range h.state {
+		snapshot[key] = BackendStatus{
+			ConsecutiveFailures: state.consecutiveFailures,
+			UnhealthyUntil:      state.unhealthyUntil,
+		}
+	}
+
+	return snapshot
 }
 
 type healthAwareSelector struct {

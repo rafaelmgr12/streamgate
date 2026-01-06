@@ -150,6 +150,10 @@ func (cfg *Config) Validate() error {
 }
 
 func validateHealthCheck(h HealthCheckConfig) error {
+	path := strings.TrimSpace(h.Path)
+	if path != "" && !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("path must start with '/'")
+	}
 	if h.Interval < 0 {
 		return fmt.Errorf("interval must be >= 0")
 	}

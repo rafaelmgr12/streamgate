@@ -317,6 +317,47 @@ func TestValidate_ServiceMustHaveAtLeastOneBackend(t *testing.T) {
 	}
 }
 
+func TestValidate_HealthCheckPathMustStartWithSlash_Global(t *testing.T) {
+	cfg := &config.Config{
+		Transports: []config.TransportConfig{{Type: "http", Addr: ":8080"}},
+		HealthCheck: config.HealthCheckConfig{
+			Path: "healthz",
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "path must start with") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_HealthCheckPathMustStartWithSlash_Service(t *testing.T) {
+	cfg := &config.Config{
+		Transports: []config.TransportConfig{{Type: "http", Addr: ":8080"}},
+		Services: []config.ServiceConfig{
+			{
+				Name:       "api",
+				PathPrefix: "/api",
+				Backends:   []string{"localhost:9001"},
+				HealthCheck: config.HealthCheckConfig{
+					Path: "healthz",
+				},
+			},
+		},
+	}
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "path must start with") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_InvalidBackendURL(t *testing.T) {
 
 	cfg := &config.Config{

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -19,6 +20,23 @@ type serviceRoute struct {
 	name       string
 	pathPrefix string
 	proxy      *httputil.ReverseProxy
+}
+
+type serviceHealthResponse struct {
+	Services []serviceHealth `json:"services"`
+}
+
+type serviceHealth struct {
+	Name       string          `json:"name"`
+	PathPrefix string          `json:"path_prefix"`
+	Backends   []backendHealth `json:"backends"`
+}
+
+type backendHealth struct {
+	URL                 string     `json:"url"`
+	Healthy             bool       `json:"healthy"`
+	ConsecutiveFailures int        `json:"consecutive_failures,omitempty"`
+	UnhealthyUntil      *time.Time `json:"unhealthy_until,omitempty"`
 }
 
 type retryRoundTripper struct {
@@ -66,6 +84,18 @@ func newHTTPHandler(cfg *config.Config, tracker *balancer.HealthTracker) http.Ha
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
+	})
+
+	mux.HandleFunc("/healthz/services", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		resp := buildServiceHealthResponse(cfg, tracker)
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		}
 	})
 
 	// Register config-driven routes
@@ -250,4 +280,58 @@ func shouldRetryStatus(status int) bool {
 func selectedTarget(ctx context.Context) *url.URL {
 	target, _ := ctx.Value(selectedTargetKey).(*url.URL)
 	return target
+}
+
+func buildServiceHealthResponse(cfg *config.Config, tracker *balancer.HealthTracker) serviceHealthResponse {
+	resp := serviceHealthResponse{}
+	if cfg == nil {
+		resp.Services = []serviceHealth{}
+		return resp
+	}
+
+	snapshot := map[string]balancer.BackendStatus{}
+	if tracker != nil {
+		snapshot = tracker.Snapshot()
+	}
+	now := time.Now()
+
+	resp.Services = make([]serviceHealth, 0, len(cfg.Services))
+	for _, svc := range cfg.Services {
+		svcHealth := serviceHealth{
+			Name:       svc.Name,
+			PathPrefix: svc.PathPrefix,
+			Backends:   make([]backendHealth, 0, len(svc.Backends)),
+		}
+
+		for _, raw := range svc.Backends {
+			u, err := parseBackendURL(raw)
+			if err != nil {
+				continue
+			}
+			key := u.String()
+			state, ok := snapshot[key]
+			healthy := true
+			if ok && !state.UnhealthyUntil.IsZero() && now.Before(state.UnhealthyUntil) {
+				healthy = false
+			}
+
+			backend := backendHealth{
+				URL:     key,
+				Healthy: healthy,
+			}
+			if ok {
+				backend.ConsecutiveFailures = state.ConsecutiveFailures
+				if !state.UnhealthyUntil.IsZero() && now.Before(state.UnhealthyUntil) {
+					until := state.UnhealthyUntil
+					backend.UnhealthyUntil = &until
+				}
+			}
+
+			svcHealth.Backends = append(svcHealth.Backends, backend)
+		}
+
+		resp.Services = append(resp.Services, svcHealth)
+	}
+
+	return resp
 }

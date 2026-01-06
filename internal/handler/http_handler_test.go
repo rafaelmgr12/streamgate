@@ -1,12 +1,16 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/rafaelmgr12/streamgate/internal/balancer"
 	"github.com/rafaelmgr12/streamgate/internal/config"
 	"github.com/rafaelmgr12/streamgate/internal/handler"
 	"github.com/stretchr/testify/assert"
@@ -180,5 +184,80 @@ func TestHTTPHandler_ServiceProxy_SkipsUnhealthyBackend(t *testing.T) {
 	}
 	if atomic.LoadInt32(&goodHits) != 4 {
 		t.Fatalf("expected good backend to be hit 4 times, got %d", goodHits)
+	}
+}
+
+func TestHTTPHandler_HealthzServices(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	cfg := &config.Config{
+		Services: []config.ServiceConfig{
+			{
+				Name:       "test",
+				PathPrefix: "/api/test/",
+				Backends:   []string{backend.URL},
+			},
+		},
+	}
+
+	tracker := balancer.NewHealthTracker(1, time.Minute)
+	u, err := url.Parse(backend.URL)
+	if err != nil {
+		t.Fatalf("parse backend url: %v", err)
+	}
+	tracker.MarkFailure(u)
+
+	h := handler.NewHTTPHandlerWithTracker(cfg, tracker)
+	server := httptest.NewServer(h)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/healthz/services")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status OK; got %v", resp.Status)
+	}
+
+	var payload struct {
+		Services []struct {
+			Name     string `json:"name"`
+			Backends []struct {
+				URL                 string     `json:"url"`
+				Healthy             bool       `json:"healthy"`
+				ConsecutiveFailures int        `json:"consecutive_failures"`
+				UnhealthyUntil      *time.Time `json:"unhealthy_until"`
+			} `json:"backends"`
+		} `json:"services"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(payload.Services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(payload.Services))
+	}
+	if payload.Services[0].Name != "test" {
+		t.Fatalf("expected service name test, got %q", payload.Services[0].Name)
+	}
+	if len(payload.Services[0].Backends) != 1 {
+		t.Fatalf("expected 1 backend, got %d", len(payload.Services[0].Backends))
+	}
+
+	backendInfo := payload.Services[0].Backends[0]
+	if backendInfo.Healthy {
+		t.Fatalf("expected backend to be unhealthy")
+	}
+	if backendInfo.ConsecutiveFailures != 1 {
+		t.Fatalf("expected consecutive failures 1, got %d", backendInfo.ConsecutiveFailures)
+	}
+	if backendInfo.UnhealthyUntil == nil {
+		t.Fatalf("expected unhealthy_until to be set")
 	}
 }
