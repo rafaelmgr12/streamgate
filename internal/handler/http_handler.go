@@ -111,11 +111,14 @@ func newHTTPHandler(cfg *config.Config, tracker *balancer.HealthTracker) http.Ha
 		mux.Handle(prefix, http.StripPrefix(stripped, rt.proxy))
 	}
 
+	limiter := middleware.NewRateLimiter(10, 5) // 10 tokens, refill 5 tokens/sec
+
 	// Compose middleware chain (outermost last in the list)
 	return middleware.Chain(
 		mux,
 		middleware.RequestID,
 		middleware.Logging,
+		middleware.RateLimitMiddleware(limiter),
 	)
 }
 func (rt *retryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
